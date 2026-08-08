@@ -1,0 +1,100 @@
+name: Build the field APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the app file
+        run: |
+          mkdir -p www
+          if   [ -f index.html ];                   then cp index.html www/index.html
+          elif [ -f ambo-situation-room.html ];     then cp ambo-situation-room.html www/index.html
+          elif [ -f www/index.html ];               then echo "already staged"
+          else
+            echo "::error::No app file found. Put index.html at the repository root."
+            ls -la; exit 1
+          fi
+          echo "Staged $(wc -c < www/index.html) bytes"
+
+      # The secret never lives in the repository. It is injected here, into the APK only.
+      # Set these under Settings → Secrets and variables → Actions.
+      - name: Bake in the backend settings
+        env:
+          BACKEND_URL: ${{ secrets.AMBO_BACKEND_URL }}
+          BACKEND_SECRET: ${{ secrets.AMBO_SECRET }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "::warning::AMBO_BACKEND_URL is not set. The APK will open in demo mode."
+          else
+            python3 - <<'PY'
+          import os, re
+          url = os.environ['BACKEND_URL']
+          sec = os.environ.get('BACKEND_SECRET', '')
+          p = 'www/index.html'
+          s = open(p, encoding='utf-8').read()
+          new = ("var CFG = { mode:'LIVE', backendUrl:%r, secret:%r, token:'', "
+                 "pollMs:30000, hotline:'0800 123 5511' };" % (url, sec))
+          s2, n = re.subn(r"var CFG = \{[^}]*\};", new, s, count=1)
+          if n != 1:
+              raise SystemExit('Could not find the CFG line to replace')
+          # Strip the demo credentials block and the test-incident control outright —
+          # neither belongs on a phone in the field.
+          s2, d = re.subn(r'<div class="demo-hint" id="demo-block">.*?</div>', '', s2, flags=re.S)
+          t = 0
+          open(p, 'w', encoding='utf-8').write(s2)
+          print('Injected settings; removed demo block:', d, 'test bar:', t)
+          PY
+            grep -c "mode:'LIVE'" www/index.html
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor
+        run: npm install
+
+      - name: Add the Android platform
+        run: npx cap add android
+
+      - name: Copy the web app in
+        run: npx cap sync android
+
+      - name: Install the launcher icon
+        run: |
+          if [ -d android-icons ]; then
+            cp -r android-icons/* android/app/src/main/res/
+            echo "Launcher icons installed"
+            ls android/app/src/main/res/mipmap-xxxhdpi/
+          else
+            echo "::warning::android-icons folder missing — the default Capacitor icon will be used"
+          fi
+
+      - name: Assemble the debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+
+      - name: Name the APK
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/*.apk "out/AMBO-Field.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AMBO-Field-APK
+          path: out/*.apk
+          if-no-files-found: error
