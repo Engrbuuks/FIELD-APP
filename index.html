@@ -155,6 +155,16 @@ textarea.fld{height:auto;min-height:92px;padding:13px 14px;line-height:1.5;resiz
 .bravo-foot .lgwrap{background:#fff;border:1px solid var(--ln);border-radius:12px;padding:9px 18px;box-shadow:var(--sh)}
 .bravo-foot .lgwrap img{height:42px;width:auto;display:block}
 .bravo-foot .bl{font-size:10.5px;color:var(--tx-3);font-style:italic}
+
+/* A tap target has to be a target. The old link was 14px tall — technically
+   clickable, impossible to hit on a phone. */
+.connect-line{text-align:center;margin-top:4px}
+.connect-line button{min-height:44px;padding:11px 22px;border-radius:22px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);
+  color:#fff;font-family:var(--f-d);font-size:13px;font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center}
+.connect-line button:active{background:rgba(255,255,255,.24)}
+.connect-line.hide{display:none}
 </style></head><body>
 
 <div id="auth"><div class="wrap">
@@ -164,8 +174,8 @@ textarea.fld{height:auto;min-height:92px;padding:13px 14px;line-height:1.5;resiz
     <input id="a-phone" class="a-inp" type="tel" inputmode="tel" placeholder="0803 000 0000" autocomplete="tel"/>
     <div id="a-err" class="a-err hide"></div>
     <button class="a-cta" id="signInBtn">Sign in</button>
-    <p class="a-hlp">Use the number the desk registered for you.<br>
-      <button type="button" id="connectBtn" style="color:#fff;text-decoration:underline;font-size:11.5px">Connect to the desk</button></p>
+    <p class="a-hlp">Use the number the desk registered for you.</p>
+    <div class="connect-line"><button type="button" id="connectBtn">Connect to the desk</button></div>
   </div>
   <div class="a-band">
     <div class="pb">Powered by</div>
@@ -257,6 +267,20 @@ function loadCfg(){ try{ var c=JSON.parse(localStorage.getItem('ambo.field.cfg')
   if(c&&c.backendUrl){ CFG.mode=c.mode||'DEMO'; CFG.backendUrl=c.backendUrl; CFG.secret=c.secret||''; CFG.token=c.token||''; } }catch(e){} }
 
 /* A stable id for this handset, so a number cannot be used on two phones. */
+/* A build that ships pointed at the desk has nothing for an agent to configure. */
+var BUILT_IN=false;
+function noteBuild(){ BUILT_IN = (CFG.mode==='LIVE' && !!CFG.backendUrl); }
+function markConnect(){
+  var l=document.querySelector('.connect-line');
+  if(l) l.classList.toggle('hide', BUILT_IN && !S.unlocked);
+}
+/* Five taps on the artwork brings it back, for whoever sets the phones up. */
+var tapN=0, tapT=null;
+function tapArt(){
+  clearTimeout(tapT); tapN++;
+  tapT=setTimeout(function(){ tapN=0; },1200);
+  if(tapN>=5){ tapN=0; S.unlocked=true; markConnect(); toast('Desk settings unlocked','ok'); }
+}
 function deviceId(){
   var d=null;
   try{ d=localStorage.getItem('ambo.device'); }catch(e){}
@@ -379,8 +403,10 @@ function iconFor(t){
 
 /* ── sign in ── */
 function boot(){
-  loadCfg(); loadQueue();
+  noteBuild(); loadCfg(); loadQueue(); markConnect();
   document.getElementById('signInBtn').addEventListener('click',doSignIn);
+  Array.prototype.forEach.call(document.querySelectorAll('.a-hero'),function(a){
+    a.addEventListener('click',tapArt); });
   document.getElementById('a-phone').addEventListener('keydown',function(e){ if(e.key==='Enter') doSignIn(); });
   var saved=null;
   try{ saved=JSON.parse(localStorage.getItem('ambo.field.agent')||'null'); }catch(e){}
