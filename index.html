@@ -165,6 +165,21 @@ textarea.fld{height:auto;min-height:92px;padding:13px 14px;line-height:1.5;resiz
   display:inline-flex;align-items:center;justify-content:center}
 .connect-line button:active{background:rgba(255,255,255,.24)}
 .connect-line.hide{display:none}
+
+.stamp{text-align:center;margin-top:7px;font-family:var(--f-m);font-size:9.5px;color:rgba(255,255,255,.45)}
+/* Each kind of incident gets its own colour, so an agent recognises the tile by
+   shape and colour before reading the words. */
+.ty .i{background:var(--bg);color:var(--tx-3)}
+.ty[data-tone="danger"] .i{background:var(--red-l);color:var(--red)}
+.ty[data-tone="money"]  .i{background:#F3E8FF;color:#7C3AED}
+.ty[data-tone="tech"]   .i{background:var(--blue-l);color:var(--blue-d)}
+.ty[data-tone="delay"]  .i{background:var(--amber-l);color:#8A5A00}
+.ty[data-tone="access"] .i{background:#FFE9E3;color:#C2410C}
+.ty[data-tone="people"] .i{background:#E6F6EF;color:var(--green)}
+.ty[data-tone="paper"]  .i{background:#EDEBFF;color:#4F46E5}
+.ty[data-tone="other"]  .i{background:var(--bg);color:var(--tx-2)}
+.ty.on{border-color:var(--blue);background:var(--blue-l);color:var(--blue-d)}
+.ty.on .i{background:#fff}
 </style></head><body>
 
 <div id="auth"><div class="wrap">
@@ -176,6 +191,7 @@ textarea.fld{height:auto;min-height:92px;padding:13px 14px;line-height:1.5;resiz
     <button class="a-cta" id="signInBtn">Sign in</button>
     <p class="a-hlp">Use the number the desk registered for you.</p>
     <div class="connect-line"><button type="button" id="connectBtn">Connect to the desk</button></div>
+    <div class="stamp"><span id="buildstamp">build F2 · 08 Aug 16:57</span> · <span id="mode-tag">not connected</span></div>
   </div>
   <div class="a-band">
     <div class="pb">Powered by</div>
@@ -270,11 +286,17 @@ function loadCfg(){ try{ var c=JSON.parse(localStorage.getItem('ambo.field.cfg')
 /* A build that ships pointed at the desk has nothing for an agent to configure. */
 var BUILT_IN=false;
 function noteBuild(){ BUILT_IN = (CFG.mode==='LIVE' && !!CFG.backendUrl); }
+function markMode(){
+  var m=document.getElementById('mode-tag');
+  if(m) m.textContent = live() ? 'connected to the desk' : 'not connected';
+}
 function markConnect(){
   var l=document.querySelector('.connect-line');
   if(l) l.classList.toggle('hide', BUILT_IN && !S.unlocked);
 }
-/* Five taps on the artwork brings it back, for whoever sets the phones up. */
+/* Five taps on the artwork brings it back on a copy that still has the control.
+   On a distributed APK the control is stripped out entirely at build time, so
+   there is nothing for this to reveal. */
 var tapN=0, tapT=null;
 function tapArt(){
   clearTimeout(tapT); tapN++;
@@ -292,20 +314,31 @@ function deviceId(){
 }
 
 var TYPES=[
-  ['Violence / Shooting Reported','warn'],
-  ['Ballot Box Snatching','box'],
-  ['Thugs Sighted','warn'],
-  ['Voter Intimidation','warn'],
-  ['Vote Buying Allegation','cash'],
-  ['Agent Denied Entry','shieldx'],
-  ['Security Absent','shieldx'],
-  ['BVAS Failure','chip'],
-  ['Accreditation Delay','clock'],
-  ['Queue Causing Concern','clock'],
-  ['Underage Voting','person'],
-  ['Result Sheet Dispute','doc'],
-  ['Something else','dot']
+  ['Violence / Shooting Reported','warn','danger'],
+  ['Ballot Box Snatching','box','danger'],
+  ['Thugs Sighted','warn','danger'],
+  ['Voter Intimidation','warn','danger'],
+  ['Vote Buying Allegation','cash','money'],
+  ['Agent Denied Entry','shieldx','access'],
+  ['Security Absent','shieldx','access'],
+  ['BVAS Failure','chip','tech'],
+  ['Accreditation Delay','clock','delay'],
+  ['Queue Causing Concern','clock','delay'],
+  ['Underage Voting','person','people'],
+  ['Result Sheet Dispute','doc','paper'],
+  ['Something else','dot','other']
 ];
+function toneFor(t){
+  var s=String(t||'').toLowerCase();
+  if(/violen|shoot|snatch|thug|intimid|ballot|box/.test(s)) return 'danger';
+  if(/buy|money|cash|bribe/.test(s)) return 'money';
+  if(/bvas|machine|fail|technic/.test(s)) return 'tech';
+  if(/delay|late|queue|crowd|accredit/.test(s)) return 'delay';
+  if(/denied|entry|absent|security|access/.test(s)) return 'access';
+  if(/underage|voter|people/.test(s)) return 'people';
+  if(/sheet|result|dispute|paper/.test(s)) return 'paper';
+  return 'other';
+}
 var SEV=['Critical','High','Medium','Low'];
 var LGAS=['Aiyedaade','Aiyedire','Atakunmosa East','Atakunmosa West','Boluwaduro','Boripe',
 'Ede North','Ede South','Egbedore','Ejigbo','Ife Central','Ife East','Ife North','Ife South',
@@ -403,7 +436,7 @@ function iconFor(t){
 
 /* ── sign in ── */
 function boot(){
-  noteBuild(); loadCfg(); loadQueue(); markConnect();
+  noteBuild(); loadCfg(); loadQueue(); markConnect(); markMode();
   document.getElementById('signInBtn').addEventListener('click',doSignIn);
   Array.prototype.forEach.call(document.querySelectorAll('.a-hero'),function(a){
     a.addEventListener('click',tapArt); });
@@ -421,6 +454,10 @@ function authErr(m){
   e.textContent=m; e.classList.remove('hide');
 }
 async function doSignIn(){
+  if(!live() && !document.querySelector('.connect-line')){
+    authErr('This app has not been set up. Ask your desk administrator for a new copy.');
+    return;
+  }
   var phone=document.getElementById('a-phone').value.trim();
   if(phone.replace(/\D/g,'').length<10){ authErr('Enter your full phone number.'); return; }
   var b=document.getElementById('signInBtn');
@@ -432,7 +469,7 @@ async function doSignIn(){
       S.agent=j.agent;
       // the backend sends the wards for this agent's own LGA, not the whole state
       if(j.wards&&j.wards.length){ S.geo.wards[j.agent.lga]=j.wards; }
-      if(j.types&&j.types.length) TYPES=j.types.map(function(t){ return [t, iconFor(t)]; });
+      if(j.types&&j.types.length) TYPES=j.types.map(function(t){ return [t, iconFor(t), toneFor(t)]; });
     } else {
       S.agent={ id:'demo', name:'Demo Agent', phone:phone, lga:'Osogbo', ward:'Ward 03', puCode:'' };
       S.geo={ lgas:LGAS.slice(), wards:{} };
@@ -541,7 +578,8 @@ function renderStatus(){
 }
 function renderTypes(){
   document.getElementById('types').innerHTML=TYPES.map(function(t){
-    return '<button class="ty'+(S.type===t[0]?' on':'')+'" data-type="'+esc(t[0])+'">'+
+    return '<button class="ty'+(S.type===t[0]?' on':'')+'" data-type="'+esc(t[0])+
+      '" data-tone="'+esc(t[2]||toneFor(t[0]))+'">'+
       '<span class="i">'+I[t[1]]+'</span><span>'+esc(t[0])+'</span></button>'; }).join('');
 }
 function renderSeverity(){
@@ -665,6 +703,10 @@ document.addEventListener('change',function(e){
 
 /* ── connect ── */
 function openConnect(){
+  // Belt and braces: on a build that ships pointed at the desk, this refuses to
+  // open even if something managed to call it. The control itself is stripped
+  // out of the APK at build time.
+  if(BUILT_IN && !S.unlocked) return;
   var m=document.getElementById('mask');
   m.innerHTML='<div class="modal"><h3>Connect to the desk</h3>'+
     '<div class="sub">Your desk administrator will give you these. You only do this once.</div>'+
@@ -685,7 +727,7 @@ async function testConnect(){
     try{ j=JSON.parse(t); }catch(e){ msg.textContent='The desk server answered with a web page. Ask the desk to set the deployment to Anyone.'; return; }
     if(!j.ok){ msg.textContent='The desk refused: '+(j.error||'unknown'); return; }
   }catch(e){ msg.textContent='Could not reach the desk: '+e.message; return; }
-  CFG.backendUrl=url; CFG.secret=sec; CFG.mode='LIVE'; saveCfg();
+  CFG.backendUrl=url; CFG.secret=sec; CFG.mode='LIVE'; saveCfg(); markMode();
   msg.textContent='Connected. Sign in with your phone number.';
   setTimeout(function(){ document.getElementById('mask').classList.add('hide'); renderStatus(); },900);
 }
