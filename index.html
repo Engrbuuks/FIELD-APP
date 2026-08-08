@@ -249,7 +249,7 @@ textarea.fld{height:auto;min-height:92px;padding:13px 14px;line-height:1.5;resiz
 <div id="mask" class="mask hide"></div>
 <div id="toast" class="toast hide"></div>
 <script>/* The AMBO Election Incidence Manager — field app */
-var CFG = { mode:'DEMO', backendUrl:'', secret:'', token:'' };
+var CFG = { mode:'LIVE', backendUrl:'https://script.google.com/macros/s/AKfycbx5DH4B9BU5cbrEXsEt40FVRVwcgrprUMtwYMdEsRWduuaEXsU6Q9GSrmk-KaW_F2jc/exec', secret:'ambo2026', token:'' };
 function live(){ return CFG.mode==='LIVE' && !!CFG.backendUrl; }
 function saveCfg(){ try{ localStorage.setItem('ambo.field.cfg',JSON.stringify(
   {mode:CFG.mode,backendUrl:CFG.backendUrl,secret:CFG.secret,token:CFG.token})); }catch(e){} }
