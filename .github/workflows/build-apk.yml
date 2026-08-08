@@ -31,7 +31,10 @@ jobs:
           BACKEND_SECRET: ${{ secrets.AMBO_SECRET }}
         run: |
           if [ -z "$BACKEND_URL" ]; then
-            echo "::warning::AMBO_BACKEND_URL is not set. The APK will open in demo mode."
+            echo "::error::AMBO_BACKEND_URL is not set."
+            echo "A field APK with no desk address is useless — an agent has no way to add one."
+            echo "Set AMBO_BACKEND_URL and AMBO_SECRET under Settings -> Secrets and variables -> Actions."
+            exit 1
           else
             python3 - <<'PY'
           import os, re
@@ -44,12 +47,15 @@ jobs:
           s2, n = re.subn(r"var CFG = \{[^}]*\};", new, s, count=1)
           if n != 1:
               raise SystemExit('Could not find the CFG line to replace')
-          # Strip the demo credentials block and the test-incident control outright —
-          # neither belongs on a phone in the field.
+          # The desk address is baked in above, so the manual connect control has no
+          # purpose on a phone handed to an agent. It is removed from the file, not
+          # hidden — an agent cannot reach what is not there.
+          s2, c = re.subn(r'<div class="connect-line">.*?</div>', '', s2, flags=re.S)
           s2, d = re.subn(r'<div class="demo-hint" id="demo-block">.*?</div>', '', s2, flags=re.S)
-          t = 0
           open(p, 'w', encoding='utf-8').write(s2)
-          print('Injected settings; removed demo block:', d, 'test bar:', t)
+          print('Injected settings; removed connect control:', c, 'demo block:', d)
+          if c == 0:
+              print('::warning::The connect control was not found to remove — check the markup')
           PY
             grep -c "mode:'LIVE'" www/index.html
           fi
